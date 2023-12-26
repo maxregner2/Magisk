@@ -19,14 +19,14 @@ jobs:
   build:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    env:
-      SCCACHE_DIRECT: false
+
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-13]
+
     steps:
-      - name: Check out
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: "recursive"
@@ -42,6 +42,83 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: "3.x"
+
+      - name: Set up sccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          variant: sccache
+          key: <span class="math-inline">\{\{ runner\.os \}\}\-</span>{{ github.sha }}
+          restore-keys: ${{ runner.os }}
+          max-size: 10000M
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            !~/.gradle/caches/build-cache-*
+          key: <span class="math-inline">\{\{ runner\.os \}\}\-gradle\-</span>{{ hashFiles('**/*.gradle.kts') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Cache build cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches/build-cache-*
+          key: <span class="math-inline">\{\{ runner\.os \}\}\-build\-cache\-</span>{{ github.sha }}
+          restore-keys: ${{ runner.os }}-build-cache-
+
+      - name: Set up NDK
+        run: python build.py -v ndk
+
+      - name: Build release (Treble)
+        run: |
+          # Build the release version of Magisk for Treble devices
+          python build.py -vr treble all
+
+      - name: Build debug (Treble)
+        run: |
+          # Build the debug version of Magisk for Treble devices
+          python build.py -v treble all
+
+      - name: Stop gradle daemon
+        run: ./gradlew --stop
+
+      # Only upload artifacts built on Linux
+      - name: Upload build artifact (Treble)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.sha }}-treble
+          path: out/
+          compression-level: 9
+
+      - name: Upload mapping and native debug symbols (Treble)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.sha }}-treble-symbols
+          path: app/build/outputs
+          compression-level: 9
+
+  test:
+    name: Test on Treble ${{ matrix.api }}
+    runs-on: macos-13
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [23, 26, 28, 29, 34]
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3
+        uses: actions/setup-python@v4
 
       - name: Set up sccache
         uses: hendrikmuhs/ccache-action@v1.2
