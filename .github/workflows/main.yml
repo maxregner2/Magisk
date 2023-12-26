@@ -75,12 +75,12 @@ jobs:
       - name: Build release (Treble)
         run: |
           # Build the release version of Magisk for Treble devices
-          python build.py -vr treble all
+          python build.py -vr  all
 
       - name: Build debug (Treble)
         run: |
           # Build the debug version of Magisk for Treble devices
-          python build.py -v treble all
+          python build.py -v all
 
       - name: Stop gradle daemon
         run: ./gradlew --stop
